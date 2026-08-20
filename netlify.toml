@@ -1,0 +1,13 @@
+[build]
+  command = "npm run build:netlify"
+  publish = "dist"
+
+[functions]
+  directory = "netlify/functions"
+  node_bundler = "esbuild"
+
+# SPA: qualquer rota que não seja um arquivo real cai no index.html do React Router/estado interno do app
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
