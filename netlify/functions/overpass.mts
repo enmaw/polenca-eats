@@ -39,6 +39,78 @@ function json(data: unknown, status = 200) {
   });
 }
 
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function hostnameOf(url: string): string {
+  try {
+    return new URL(url).hostname;
+  } catch {
+    return url;
+  }
+}
+
+// Classifica o erro pra deixar claro se foi rejeição de rede (ex: mirror
+// bloqueando IP de datacenter), timeout, ou erro HTTP do próprio Overpass.
+function describeError(err: any): string {
+  if (err.code === "ECONNABORTED" || err.message?.includes("timeout")) {
+    return "timeout";
+  }
+  if (err.code) return err.code; // ECONNREFUSED, ENOTFOUND, ETIMEDOUT, etc.
+  if (err.response) return `HTTP ${err.response.status}`;
+  return err.message ?? "unknown error";
+}
+
+// Faz uma tentativa contra um endpoint, com até `retries` novas tentativas
+// em caso de erro transitório (rede, timeout, 429/502/503/504). Backoff
+// exponencial curto pra não estourar o timeout total da function.
+async function fetchOverpass(endpoint: string, query: string, retries = 1): Promise<unknown> {
+  const urlEncodedBody = `data=${encodeURIComponent(query)}`;
+  let lastError: any;
+
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const response = await axios.post(endpoint, urlEncodedBody, {
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+          Accept: "application/json",
+          "User-Agent": "NossoRoleApp/1.0 (github-opensource-version)",
+        },
+        timeout: 8000,
+        responseType: "json",
+      });
+
+      const data = response.data;
+      if (!data || !data.elements) {
+        throw new Error(`Missing elements in response from ${hostnameOf(endpoint)}`);
+      }
+      if (data.remark && data.remark.toLowerCase().includes("error")) {
+        throw new Error(`Overpass error from ${hostnameOf(endpoint)}: ${data.remark}`);
+      }
+      return data;
+    } catch (err: any) {
+      lastError = err;
+      const status = err?.response?.status;
+      const isRetryable =
+        !status || status === 429 || status === 502 || status === 503 || status === 504;
+
+      if (attempt < retries && isRetryable) {
+        const backoffMs = 300 * Math.pow(2, attempt); // 300ms, 600ms, ...
+        await sleep(backoffMs);
+        continue;
+      }
+      break;
+    }
+  }
+
+  const reason = describeError(lastError);
+  const wrapped = new Error(`${hostnameOf(endpoint)}: ${reason}`);
+  (wrapped as any).endpoint = endpoint;
+  (wrapped as any).reason = reason;
+  throw wrapped;
+}
+
 export default async (req: Request, _context: Context) => {
   if (req.method !== "POST") {
     return json({ error: "Method not allowed" }, 405);
@@ -72,40 +144,18 @@ export default async (req: Request, _context: Context) => {
 
   // Tenta todos os espelhos do Overpass em paralelo (o primeiro que responder
   // com sucesso "ganha"), em vez de um por vez. Isso evita que a soma dos
-  // timeouts individuais estoure o limite de execução da function.
-  const attempts = ENDPOINTS.map(async (endpoint) => {
-    const urlEncodedBody = `data=${encodeURIComponent(query)}`;
-    const response = await axios.post(endpoint, urlEncodedBody, {
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded",
-        Accept: "application/json",
-        "User-Agent": "NossoRoleApp/1.0 (github-opensource-version)",
-      },
-      timeout: 15000,
-      responseType: "json",
-    });
-
-    const data = response.data;
-    if (!data || !data.elements) {
-      throw new Error(`Missing elements in response from ${endpoint}`);
-    }
-    if (data.remark && data.remark.toLowerCase().includes("error")) {
-      throw new Error(`Overpass error from ${endpoint}: ${data.remark}`);
-    }
-    return data;
-  });
+  // timeouts individuais estoure o limite de execução da function. Cada
+  // endpoint ainda tem 1 retry interno pra erros transitórios (rede/429/5xx).
+  const attempts = ENDPOINTS.map((endpoint) => fetchOverpass(endpoint, query, 1));
 
   try {
     successData = await Promise.any(attempts);
   } catch (aggregateError: any) {
     const reasons: Error[] = aggregateError?.errors ?? [];
     for (const err of reasons) {
-      const anyErr = err as any;
-      const errMsg = anyErr.response
-        ? `Request failed with status code ${anyErr.response.status}`
-        : anyErr.message;
-      errors.push(errMsg);
-      console.warn("Endpoint falhou:", errMsg);
+      const msg = err?.message ?? String(err);
+      errors.push(msg);
+      console.warn("Endpoint falhou:", msg);
     }
   }
 
@@ -113,9 +163,21 @@ export default async (req: Request, _context: Context) => {
     return json(successData);
   }
 
+  // Se TODOS os endpoints falharam com erro de rede (sem status HTTP nenhum),
+  // é forte indício de que os mirrors públicos estão bloqueando/limitando o
+  // IP de datacenter da Netlify Function, e não um problema no nosso código.
+  const allNetworkErrors = errors.every(
+    (e) => /ECONNREFUSED|ENOTFOUND|ETIMEDOUT|timeout|ECONNRESET/i.test(e)
+  );
+
   console.warn("Overpass proxy exhausted all endpoints:", errors);
   return json(
-    { error: "All OpenStreetMap servers failed or are overloaded.", details: errors },
+    {
+      error: allNetworkErrors
+        ? "Não conseguimos alcançar nenhum servidor do OpenStreetMap agora (possível bloqueio de IP de datacenter pelos mirrors públicos)."
+        : "Todos os servidores do OpenStreetMap falharam ou estão sobrecarregados.",
+      details: errors,
+    },
     502
   );
 };
