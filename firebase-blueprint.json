@@ -1,0 +1,24 @@
+{
+  "entities": {
+    "AppData": {
+      "title": "AppData",
+      "description": "The entire application state for a user/couple.",
+      "type": "object",
+      "properties": {
+        "casal": { "type": "object" },
+        "lugares": { "type": "array" },
+        "regioes": { "type": "array" },
+        "conquistas": { "type": "array" },
+        "ownerId": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      }
+    }
+  },
+  "firestore": {
+    "users/{userId}": {
+      "schema": { "$ref": "#/entities/AppData" },
+      "description": "Stores all app data for a user."
+    }
+  }
+}

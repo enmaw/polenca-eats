@@ -1,0 +1,12 @@
+{
+  "projectId": "polenca-eats",
+  "appId": "1:281510823276:web:dd21c2af8eb5dcf7421f49",
+  "apiKey": "AIzaSyB4gj4qlNDQ8oDWsrc4UOQKoKlJbwdB1R4",
+  "authDomain": "polenca-eats.firebaseapp.com",
+  "firestoreDatabaseId": "(default)",
+  "storageBucket": "polenca-eats.firebasestorage.app",
+  "messagingSenderId": "281510823276",
+  "measurementId": "",
+  "oAuthClientId": "",
+  "recaptchaSiteKey": ""
+}

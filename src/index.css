@@ -1,0 +1,78 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: 'SingsongDigits', 'Fredoka', 'Nunito', sans-serif;
+  --font-singsong: 'Singsong', 'Singsong Regular', 'Sniglet', 'Nunito', sans-serif;
+  --font-whimsical: 'SingsongDigits', 'Whimsical Wilma', 'Fredoka', 'Sniglet', 'Nunito', sans-serif;
+  --animate-blob: blob 8s infinite;
+
+  --animate-float: float 4s ease-in-out infinite;
+  --keyframes-blob: {
+    "0%": { transform: "translate(0px, 0px) scale(1)" },
+    "33%": { transform: "translate(20px, -30px) scale(1.1) rotate(5deg)" },
+    "66%": { transform: "translate(-15px, 20px) scale(0.9) rotate(-5deg)" },
+    "100%": { transform: "translate(0px, 0px) scale(1)" }
+  };
+  --keyframes-float: {
+    "0%, 100%": { transform: "translateY(0)" },
+    "50%": { transform: "translateY(-12px)" }
+  };
+}
+
+@import url('https://fonts.googleapis.com/css2?family=Fredoka:wght@300;400;500;600;700&family=Nunito:wght@400;600;700;800;900&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Sniglet:wght@400;800&display=swap');
+
+@font-face {
+  font-family: 'SingsongDigits';
+  src: url('/Singsong.otf') format('opentype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+  unicode-range: U+0030-0039, U+0024, U+002F, U+002B, U+002D, U+002E, U+002C;
+}
+
+@font-face {
+  font-family: 'Whimsical Wilma';
+  src: url('/Whimsical_Wilma.otf') format('opentype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Singsong';
+  src: url('/Singsong.otf') format('opentype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
+
+
+@layer base {
+  html, body, #root {
+    @apply h-full w-full m-0 p-0 overflow-hidden text-[#5c4b51];
+    font-family: 'SingsongDigits', 'Fredoka', 'Nunito', sans-serif;
+    background-color: #ffe6e8;
+    background-image: 
+      radial-gradient(at 20% 20%, #ffc2d1 0px, transparent 50%),
+      radial-gradient(at 80% 0%, #e0c3fc 0px, transparent 50%),
+      radial-gradient(at 0% 50%, #c2e9fb 0px, transparent 50%),
+      radial-gradient(at 80% 50%, #ffb3c6 0px, transparent 50%),
+      radial-gradient(at 0% 100%, #ffdfba 0px, transparent 50%),
+      radial-gradient(at 80% 100%, #d4fc79 0px, transparent 50%),
+      radial-gradient(at 0% 0%, #ffd1ff 0px, transparent 50%);
+    background-size: 150% 150%;
+    animation: gradientMove 15s ease infinite alternate;
+  }
+  
+  h1, h2, h3, h4, h5, h6, button {
+    font-family: 'Singsong', 'Singsong Regular', 'Sniglet', 'Nunito', sans-serif;
+  }
+}
+
+@keyframes gradientMove {
+  0% { background-position: 0% 0%; }
+  100% { background-position: 100% 100%; }
+}
+

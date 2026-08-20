@@ -1,0 +1,78 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Nega tudo por padrão; só os blocos abaixo liberam acesso.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() { return request.resource.data; }
+    function existing()  { return resource.data; }
+
+    // Só quem tem o e-mail (verificado) na lista sharedWith do documento
+    // é considerado "parceiro" com acesso liberado. O e-mail é adicionado
+    // manualmente pelo dono na tela de Perfil.
+    function isSharedWithMe() {
+      return isSignedIn()
+        && request.auth.token.email_verified == true
+        && ('sharedWith' in existing())
+        && existing().sharedWith is list
+        && request.auth.token.email in existing().sharedWith;
+    }
+
+    function isValidAppData(data) {
+      return data.keys().hasAll(['casal', 'lugares', 'regioes', 'conquistas'])
+        && data.casal is map
+        && data.lugares is list
+        && data.regioes is list
+        && data.conquistas is list
+        && (!('sharedWith' in data) || data.sharedWith is list);
+    }
+
+    match /users/{userId} {
+      allow read:   if isOwner(userId) || isSharedWithMe();
+      allow create: if isOwner(userId)
+                    && isValidId(userId)
+                    && isValidAppData(incoming());
+      // Atualização: só o dono, ou quem já está em sharedWith.
+      // Isso impede que um estranho autenticado, mesmo sabendo o ID
+      // do documento, leia ou sobrescreva os dados do casal.
+      allow update: if isOwner(userId) || isSharedWithMe();
+      allow delete: if isOwner(userId) && isValidId(userId);
+    }
+
+    // Coleção usada pelo fluxo de "código de convite" (App.tsx).
+    // Antes não existia regra nenhuma aqui, então essa funcionalidade
+    // ficava bloqueada pelo "deny all" do topo.
+    match /invites/{code} {
+      function isValidCode(c) {
+        return c is string && c.size() >= 4 && c.size() <= 16 && c.matches('^[A-Z0-9]+$');
+      }
+
+      // Precisa estar logado pra consultar um código (não expõe nada sensível,
+      // só o uid do dono, necessário pra localizar o documento certo).
+      allow read: if isSignedIn() && isValidCode(code);
+
+      allow create: if isSignedIn()
+                    && isValidCode(code)
+                    && incoming().keys().hasOnly(['ownerId'])
+                    && incoming().ownerId == request.auth.uid;
+
+      allow update: if false;
+      allow delete: if isSignedIn() && existing().ownerId == request.auth.uid;
+    }
+  }
+}
