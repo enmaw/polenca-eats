@@ -4,12 +4,12 @@
 
 [functions]
   directory = "netlify/functions"
-  # esbuild quebra em runtime com firebase-admin: o jwks-rsa (usado por
-  # firebase-admin/auth) faz require() do pacote "jose", que é ESM-only,
-  # e o esbuild empacota tudo como CommonJS -> ERR_REQUIRE_ESM. O nft
-  # (Node File Trace) não reescreve os módulos, só copia o que é
-  # necessário do node_modules, então evita esse conflito.
-  node_bundler = "nft"
+  # "nft" não é um bundler válido do Netlify (as únicas opções são esbuild
+  # e zisi) — e functions em TypeScript sempre usam esbuild de qualquer
+  # forma. O crash real era o firebase-admin/jwks-rsa fazendo require() de
+  # um pacote ESM-only (jose v6); resolvido removendo o firebase-admin/auth
+  # da function e verificando o JWT manualmente com jose (import ESM direto).
+  node_bundler = "esbuild"
 
 # SPA: qualquer rota que não seja um arquivo real cai no index.html do React Router/estado interno do app
 [[redirects]]
