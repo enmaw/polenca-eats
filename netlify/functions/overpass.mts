@@ -70,35 +70,42 @@ export default async (req: Request, _context: Context) => {
   let successData: unknown = null;
   const errors: string[] = [];
 
-  for (const endpoint of ENDPOINTS) {
-    try {
-      const urlEncodedBody = `data=${encodeURIComponent(query)}`;
-      const response = await axios.post(endpoint, urlEncodedBody, {
-        headers: {
-          "Content-Type": "application/x-www-form-urlencoded",
-          Accept: "application/json",
-          "User-Agent": "NossoRoleApp/1.0 (github-opensource-version)",
-        },
-        timeout: 20000,
-        responseType: "json",
-      });
+  // Tenta todos os espelhos do Overpass em paralelo (o primeiro que responder
+  // com sucesso "ganha"), em vez de um por vez. Isso evita que a soma dos
+  // timeouts individuais estoure o limite de execução da function.
+  const attempts = ENDPOINTS.map(async (endpoint) => {
+    const urlEncodedBody = `data=${encodeURIComponent(query)}`;
+    const response = await axios.post(endpoint, urlEncodedBody, {
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        Accept: "application/json",
+        "User-Agent": "NossoRoleApp/1.0 (github-opensource-version)",
+      },
+      timeout: 15000,
+      responseType: "json",
+    });
 
-      const data = response.data;
-      if (!data || !data.elements) {
-        throw new Error(`Missing elements in response from ${endpoint}`);
-      }
-      if (data.remark && data.remark.toLowerCase().includes("error")) {
-        throw new Error(`Overpass error from ${endpoint}: ${data.remark}`);
-      }
+    const data = response.data;
+    if (!data || !data.elements) {
+      throw new Error(`Missing elements in response from ${endpoint}`);
+    }
+    if (data.remark && data.remark.toLowerCase().includes("error")) {
+      throw new Error(`Overpass error from ${endpoint}: ${data.remark}`);
+    }
+    return data;
+  });
 
-      successData = data;
-      break;
-    } catch (err: any) {
-      const errMsg = err.response
-        ? `Request failed with status code ${err.response.status}`
-        : err.message;
+  try {
+    successData = await Promise.any(attempts);
+  } catch (aggregateError: any) {
+    const reasons: Error[] = aggregateError?.errors ?? [];
+    for (const err of reasons) {
+      const anyErr = err as any;
+      const errMsg = anyErr.response
+        ? `Request failed with status code ${anyErr.response.status}`
+        : anyErr.message;
       errors.push(errMsg);
-      console.warn(`Failed endpoint ${endpoint}:`, errMsg);
+      console.warn("Endpoint falhou:", errMsg);
     }
   }
 
